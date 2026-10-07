@@ -1,0 +1,9 @@
+{
+  "id": "reveal",
+  "name": "Reveal",
+  "version": "0.1.0",
+  "minAppVersion": "1.8.7",
+  "description": "Fast literal and regular-expression search powered by ripgrep.",
+  "author": "Ishaan-Datta",
+  "isDesktopOnly": true
+}
