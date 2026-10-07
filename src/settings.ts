@@ -53,6 +53,18 @@ export class RevealSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
+			.setName("Fuzzy fallback")
+			.setDesc(
+				"When a literal search has no exact matches, rank vault lines using fuzzy subsequence matching.",
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(this.revealPlugin.settings.fuzzyFallback).onChange(async (value) => {
+					this.revealPlugin.settings.fuzzyFallback = value;
+					await this.revealPlugin.saveSettings();
+				}),
+			);
+
+		new Setting(containerEl)
 			.setName("Case sensitivity")
 			.setDesc("Smart case is insensitive unless the query contains an uppercase letter.")
 			.addDropdown((dropdown) =>

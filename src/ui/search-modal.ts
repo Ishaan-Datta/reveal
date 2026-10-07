@@ -6,6 +6,7 @@ import type {
 	SearchResult,
 	SearchScope,
 } from "../model";
+import { runFuzzySearch } from "../search/fuzzy";
 import { runRipgrepSearch } from "../search/ripgrep";
 
 interface SearchModalOptions {
@@ -117,6 +118,34 @@ export class RevealSearchModal extends Modal {
 			});
 
 			if (generation !== this.generation) return;
+			if (
+				count === 0 &&
+				this.options.settings.fuzzyFallback &&
+				!this.options.settings.useRegex
+			) {
+				this.setStatus("No exact matches. Trying fuzzy search...");
+				const fuzzyResults = await runFuzzySearch({
+					query,
+					scope: this.options.scope,
+					vaultPath: this.options.vaultPath,
+					settings: this.options.settings,
+					signal: controller.signal,
+				});
+				if (generation !== this.generation || controller.signal.aborted) return;
+				for (const result of fuzzyResults) {
+					this.results.push(result);
+					this.renderResult(result, this.results.length - 1);
+				}
+				if (fuzzyResults.length > 0) this.selectResult(0);
+				this.searchController = null;
+				this.setStatus(
+					fuzzyResults.length === 0
+						? "No exact or fuzzy matches found."
+						: `${String(fuzzyResults.length)} fuzzy matching ${fuzzyResults.length === 1 ? "line" : "lines"}.`,
+				);
+				return;
+			}
+
 			this.searchController = null;
 			if (count === 0) this.setStatus("No matches found.");
 			else if (count >= this.options.settings.maxResults) {

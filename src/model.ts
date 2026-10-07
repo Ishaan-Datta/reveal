@@ -3,6 +3,7 @@ export type CaseMode = "smart" | "sensitive" | "insensitive";
 export interface RevealSettings {
 	ripgrepPath: string;
 	useRegex: boolean;
+	fuzzyFallback: boolean;
 	caseMode: CaseMode;
 	maxResults: number;
 	debounceMs: number;
@@ -13,6 +14,7 @@ export interface RevealSettings {
 export const DEFAULT_SETTINGS: RevealSettings = {
 	ripgrepPath: "rg",
 	useRegex: false,
+	fuzzyFallback: true,
 	caseMode: "smart",
 	maxResults: 200,
 	debounceMs: 150,
