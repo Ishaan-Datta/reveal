@@ -14,6 +14,11 @@ export interface RipgrepSearchRequest {
 	onResult: (result: SearchResult) => void;
 }
 
+export interface RipgrepSearchSummary {
+	count: number;
+	truncated: boolean;
+}
+
 export class RipgrepProcessError extends Error {
 	constructor(message: string) {
 		super(message);
@@ -61,7 +66,7 @@ export function buildRipgrepArgs(
 	return args;
 }
 
-export function runRipgrepSearch(request: RipgrepSearchRequest): Promise<number> {
+export function runRipgrepSearch(request: RipgrepSearchRequest): Promise<RipgrepSearchSummary> {
 	if (request.signal.aborted) return Promise.reject(createAbortError());
 
 	return new Promise((resolve, reject) => {
@@ -85,18 +90,19 @@ export function runRipgrepSearch(request: RipgrepSearchRequest): Promise<number>
 			if (settled) return;
 			settled = true;
 			request.signal.removeEventListener("abort", abort);
-			if (error == null) resolve(resultCount);
+			if (error == null) resolve({ count: resultCount, truncated: reachedLimit });
 			else reject(error);
 		};
 
 		const parser = new RipgrepJsonParser((result) => {
 			if (reachedLimit || request.signal.aborted) return;
-			resultCount += 1;
-			request.onResult(result);
-			if (resultCount >= request.settings.maxResults) {
+			if (resultCount >= Math.max(1, request.settings.maxResults)) {
 				reachedLimit = true;
 				child.kill();
+				return;
 			}
+			resultCount += 1;
+			request.onResult(result);
 		});
 
 		const abort = (): void => {

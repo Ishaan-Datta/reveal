@@ -1,4 +1,4 @@
-import { App, Modal, setIcon } from "obsidian";
+import { App, Modal, Notice } from "obsidian";
 
 import type {
 	OpenTarget,
@@ -21,8 +21,8 @@ interface SearchModalOptions {
 export class RevealSearchModal extends Modal {
 	private inputEl!: HTMLInputElement;
 	private resultsEl!: HTMLElement;
-	private statusEl!: HTMLElement;
-	private readonly results: SearchResult[] = [];
+	private countEl!: HTMLElement;
+	private results: SearchResult[] = [];
 	private selectedIndex = -1;
 	private debounceTimer: number | null = null;
 	private searchController: AbortController | null = null;
@@ -33,35 +33,27 @@ export class RevealSearchModal extends Modal {
 	}
 
 	override onOpen(): void {
-		this.modalEl.addClass("reveal-search-modal");
-		this.contentEl.empty();
+		this.modalEl.replaceChildren();
+		this.modalEl.addClass("reveal-search-modal", "prompt");
+		this.modalEl.removeClass("modal");
+		this.modalEl.tabIndex = -1;
 
-		const headerEl = this.contentEl.createDiv({ cls: "reveal-search-header" });
-		const iconEl = headerEl.createSpan({ cls: "reveal-search-icon" });
-		setIcon(iconEl, "search");
-		this.inputEl = headerEl.createEl("input", {
-			cls: "reveal-search-input",
-			type: "search",
-			placeholder:
-				this.options.scope.type === "vault"
-					? "Search every note..."
-					: `Search ${this.options.scope.path.split("/").pop() ?? "current note"}...`,
+		const inputContainerEl = this.modalEl.createDiv({ cls: "reveal-search-input-container" });
+		const inputFieldEl = inputContainerEl.createDiv({ cls: "reveal-search-input-field" });
+		this.inputEl = inputFieldEl.createEl("input", {
+			cls: "prompt-input reveal-search-input",
+			type: "text",
+			placeholder: "Search...",
 			value: this.options.initialQuery,
 		});
-		this.inputEl.setAttr("aria-label", "Reveal search query");
+		this.inputEl.setAttr("aria-label", "Search notes");
+		this.inputEl.setAttr("spellcheck", "false");
 
-		const scopeEl = this.contentEl.createDiv({ cls: "reveal-search-scope" });
-		scopeEl.createSpan({
-			cls: "reveal-search-scope-badge",
-			text: this.options.scope.type === "vault" ? "Vault" : "Current file",
-		});
-		if (this.options.scope.type === "file") {
-			scopeEl.createSpan({ cls: "reveal-search-scope-path", text: this.options.scope.path });
-		}
-
-		this.resultsEl = this.contentEl.createDiv({ cls: "reveal-search-results" });
+		this.countEl = inputContainerEl.createSpan({ cls: "reveal-search-count" });
+		this.countEl.hidden = true;
+		this.resultsEl = this.modalEl.createDiv({ cls: "prompt-results reveal-search-results" });
 		this.resultsEl.setAttr("role", "listbox");
-		this.statusEl = this.contentEl.createDiv({ cls: "reveal-search-status" });
+		this.resultsEl.addEventListener("mousedown", (event: MouseEvent) => event.preventDefault());
 
 		this.inputEl.addEventListener("input", () => this.queueSearch());
 		this.inputEl.addEventListener("keydown", (event: KeyboardEvent) => this.handleKeydown(event));
@@ -73,7 +65,7 @@ export class RevealSearchModal extends Modal {
 
 	override onClose(): void {
 		this.cancelSearch();
-		this.contentEl.empty();
+		this.modalEl.empty();
 		this.options.onClose();
 	}
 
@@ -81,50 +73,43 @@ export class RevealSearchModal extends Modal {
 		this.cancelSearch();
 		this.generation += 1;
 		const generation = this.generation;
-		this.results.length = 0;
-		this.selectedIndex = -1;
-		this.resultsEl.empty();
+		const query = this.inputEl.value;
 
-		if (this.inputEl.value.length === 0) {
-			this.setStatus("Type to search. Enter opens a result; Ctrl/Cmd+Enter opens a new tab.");
+		if (query.length === 0) {
+			this.updateResults([], false, false);
 			return;
 		}
 
-		this.setStatus("Waiting to search...");
 		this.debounceTimer = window.setTimeout(() => {
 			this.debounceTimer = null;
-			void this.startSearch(generation, this.inputEl.value);
+			void this.startSearch(generation, query);
 		}, this.options.settings.debounceMs);
 	}
 
 	private async startSearch(generation: number, query: string): Promise<void> {
 		const controller = new AbortController();
 		this.searchController = controller;
-		this.setStatus("Searching...");
+		const results: SearchResult[] = [];
 
 		try {
-			const count = await runRipgrepSearch({
+			const summary = await runRipgrepSearch({
 				query,
 				scope: this.options.scope,
 				vaultPath: this.options.vaultPath,
 				settings: this.options.settings,
 				signal: controller.signal,
 				onResult: (result) => {
-					if (generation !== this.generation || controller.signal.aborted) return;
-					this.results.push(result);
-					this.renderResult(result, this.results.length - 1);
-					if (this.selectedIndex === -1) this.selectResult(0);
+					if (generation === this.generation && !controller.signal.aborted) results.push(result);
 				},
 			});
 
-			if (generation !== this.generation) return;
+			if (generation !== this.generation || controller.signal.aborted) return;
 			if (
-				count === 0 &&
+				summary.count === 0 &&
 				this.options.settings.fuzzyFallback &&
 				!this.options.settings.useRegex
 			) {
-				this.setStatus("No exact matches. Trying fuzzy search...");
-				const fuzzyResults = await runFuzzySearch({
+				const fuzzy = await runFuzzySearch({
 					query,
 					scope: this.options.scope,
 					vaultPath: this.options.vaultPath,
@@ -132,32 +117,18 @@ export class RevealSearchModal extends Modal {
 					signal: controller.signal,
 				});
 				if (generation !== this.generation || controller.signal.aborted) return;
-				for (const result of fuzzyResults) {
-					this.results.push(result);
-					this.renderResult(result, this.results.length - 1);
-				}
-				if (fuzzyResults.length > 0) this.selectResult(0);
 				this.searchController = null;
-				this.setStatus(
-					fuzzyResults.length === 0
-						? "No exact or fuzzy matches found."
-						: `${String(fuzzyResults.length)} fuzzy matching ${fuzzyResults.length === 1 ? "line" : "lines"}.`,
-				);
+				this.updateResults(fuzzy.results, fuzzy.truncated, true);
 				return;
 			}
 
 			this.searchController = null;
-			if (count === 0) this.setStatus("No matches found.");
-			else if (count >= this.options.settings.maxResults) {
-				this.setStatus(`Showing the first ${String(count)} matching lines.`);
-			} else {
-				this.setStatus(`${String(count)} matching ${count === 1 ? "line" : "lines"}.`);
-			}
+			this.updateResults(results, summary.truncated, true);
 		} catch (error) {
 			if (generation !== this.generation || controller.signal.aborted) return;
 			this.searchController = null;
 			const message = error instanceof Error ? error.message : String(error);
-			this.setStatus(`Search failed: ${message}`, true);
+			new Notice(`Reveal search failed: ${message}`);
 		}
 	}
 
@@ -170,26 +141,72 @@ export class RevealSearchModal extends Modal {
 		this.searchController = null;
 	}
 
-	private renderResult(result: SearchResult, index: number): void {
-		const resultEl = this.resultsEl.createDiv({ cls: "reveal-search-result" });
+	private updateResults(results: SearchResult[], truncated: boolean, showCount: boolean): void {
+		this.results = results;
+		this.countEl.hidden = !showCount;
+		this.countEl.setText(
+			truncated ? `${String(this.options.settings.maxResults)}+` : String(results.length),
+		);
+
+		for (let index = 0; index < results.length; index += 1) {
+			let resultEl = this.resultsEl.children[index] as HTMLElement | undefined;
+			if (resultEl == null) resultEl = this.createResultElement();
+			this.renderResult(resultEl, results[index] as SearchResult, index);
+		}
+
+		while (this.resultsEl.children.length > results.length) {
+			this.resultsEl.lastElementChild?.remove();
+		}
+
+		this.selectedIndex = results.length > 0 ? 0 : -1;
+		this.updateSelection();
+	}
+
+	private createResultElement(): HTMLElement {
+		const resultEl = this.resultsEl.createDiv({ cls: "suggestion-item reveal-search-result" });
 		resultEl.setAttr("role", "option");
-		resultEl.dataset.index = String(index);
-
-		const locationEl = resultEl.createDiv({ cls: "reveal-search-location" });
-		locationEl.createSpan({ cls: "reveal-search-path", text: result.path });
-		locationEl.createSpan({
-			cls: "reveal-search-line-number",
-			text: `Line ${String(result.line + 1)}`,
+		resultEl.addEventListener("mouseenter", () => {
+			const index = Number(resultEl.dataset.index);
+			if (Number.isInteger(index)) this.selectResult(index);
 		});
+		resultEl.addEventListener("click", (event: MouseEvent) => {
+			const index = Number(resultEl.dataset.index);
+			if (Number.isInteger(index)) void this.chooseResult(index, this.targetFromEvent(event));
+		});
+		return resultEl;
+	}
 
-		const snippetEl = resultEl.createDiv({ cls: "reveal-search-snippet" });
+	private renderResult(resultEl: HTMLElement, result: SearchResult, index: number): void {
+		resultEl.empty();
+		resultEl.dataset.index = String(index);
+		resultEl.setAttr("aria-selected", "false");
+
+		const pathSeparator = result.path.lastIndexOf("/");
+		const folder = pathSeparator >= 0 ? result.path.slice(0, pathSeparator) : "";
+		const filename = result.path.slice(pathSeparator + 1);
+		const extensionSeparator = filename.lastIndexOf(".");
+		const title = extensionSeparator > 0 ? filename.slice(0, extensionSeparator) : filename;
+		const extension = extensionSeparator > 0 ? filename.slice(extensionSeparator) : "";
+
+		const mainEl = resultEl.createDiv({ cls: "reveal-search-result-main" });
+		const titleContainerEl = mainEl.createDiv({ cls: "reveal-search-result-title-container" });
+		const titleEl = titleContainerEl.createSpan({ cls: "reveal-search-result-title" });
+		titleEl.createSpan({ text: title });
+		if (extension.length > 0) {
+			titleEl.createSpan({ cls: "reveal-search-result-extension", text: extension });
+		}
+		if (folder.length > 0) {
+			mainEl.createDiv({ cls: "reveal-search-result-folder", text: folder });
+		}
+
+		const snippetEl = mainEl.createDiv({ cls: "reveal-search-result-body" });
 		let offset = 0;
 		for (const range of result.ranges) {
 			const from = Math.min(Math.max(range.from, offset), result.lineText.length);
 			const to = Math.min(Math.max(range.to, from), result.lineText.length);
 			if (from > offset) snippetEl.createSpan({ text: result.lineText.slice(offset, from) });
 			if (to > from) {
-				snippetEl.createEl("mark", {
+				snippetEl.createSpan({
 					cls: "reveal-search-highlight",
 					text: result.lineText.slice(from, to),
 				});
@@ -199,14 +216,6 @@ export class RevealSearchModal extends Modal {
 		if (offset < result.lineText.length) {
 			snippetEl.createSpan({ text: result.lineText.slice(offset) });
 		}
-
-		resultEl.addEventListener("mouseenter", () => this.selectResult(index));
-		resultEl.addEventListener("mousedown", (event: MouseEvent) => {
-			event.preventDefault();
-		});
-		resultEl.addEventListener("click", (event: MouseEvent) => {
-			void this.chooseResult(index, this.targetFromEvent(event));
-		});
 	}
 
 	private handleKeydown(event: KeyboardEvent): void {
@@ -238,14 +247,20 @@ export class RevealSearchModal extends Modal {
 	}
 
 	private selectResult(index: number): void {
-		const previous = this.resultsEl.querySelector(".is-selected");
-		previous?.removeClass("is-selected");
-		previous?.setAttr("aria-selected", "false");
-
+		if (index < 0 || index >= this.results.length) return;
 		this.selectedIndex = index;
-		const selected = this.resultsEl.querySelector<HTMLElement>(`[data-index="${String(index)}"]`);
-		selected?.addClass("is-selected");
-		selected?.setAttr("aria-selected", "true");
+		this.updateSelection();
+	}
+
+	private updateSelection(): void {
+		for (let index = 0; index < this.resultsEl.children.length; index += 1) {
+			const resultEl = this.resultsEl.children[index] as HTMLElement;
+			const selected = index === this.selectedIndex;
+			resultEl.toggleClass("is-selected", selected);
+			resultEl.setAttr("aria-selected", String(selected));
+		}
+
+		const selected = this.resultsEl.children[this.selectedIndex] as HTMLElement | undefined;
 		selected?.scrollIntoView({ block: "nearest" });
 	}
 
@@ -260,10 +275,5 @@ export class RevealSearchModal extends Modal {
 		if (event.altKey) return "split";
 		if (event.metaKey || event.ctrlKey) return "tab";
 		return "current";
-	}
-
-	private setStatus(message: string, isError = false): void {
-		this.statusEl.setText(message);
-		this.statusEl.toggleClass("is-error", isError);
 	}
 }

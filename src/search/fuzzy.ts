@@ -26,6 +26,11 @@ export interface FuzzySearchRequest {
 	signal: AbortSignal;
 }
 
+export interface FuzzySearchResults {
+	results: SearchResult[];
+	truncated: boolean;
+}
+
 function indexedCharacters(text: string): IndexedCharacter[] {
 	const characters: IndexedCharacter[] = [];
 	for (let index = 0; index < text.length; ) {
@@ -110,7 +115,7 @@ function compareMatches(left: ScoredMatch, right: ScoredMatch): number {
 	return pathComparison !== 0 ? pathComparison : left.result.line - right.result.line;
 }
 
-export async function runFuzzySearch(request: FuzzySearchRequest): Promise<SearchResult[]> {
+export async function runFuzzySearch(request: FuzzySearchRequest): Promise<FuzzySearchResults> {
 	const limit = Math.max(1, request.settings.maxResults);
 	const matches: ScoredMatch[] = [];
 
@@ -146,5 +151,8 @@ export async function runFuzzySearch(request: FuzzySearchRequest): Promise<Searc
 	});
 
 	matches.sort(compareMatches);
-	return matches.slice(0, limit).map(({ result }) => result);
+	return {
+		results: matches.slice(0, limit).map(({ result }) => result),
+		truncated: matches.length > limit,
+	};
 }

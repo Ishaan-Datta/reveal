@@ -55,7 +55,7 @@ describe("runFuzzySearch", () => {
 		await writeFile(join(directory, "First.md"), "A needle in this line\n");
 		await writeFile(join(directory, "Second.md"), "n very distant d and l then e\n");
 
-		const results = await runFuzzySearch({
+		const search = await runFuzzySearch({
 			query: "ndle",
 			scope: { type: "vault" },
 			vaultPath: directory,
@@ -63,11 +63,29 @@ describe("runFuzzySearch", () => {
 			signal: new AbortController().signal,
 		});
 
-		expect(results).toHaveLength(2);
-		expect(results[0]?.path).toBe("First.md");
-		expect(results[0]?.ranges).toEqual([
+		expect(search.truncated).toBe(false);
+		expect(search.results).toHaveLength(2);
+		expect(search.results[0]?.path).toBe("First.md");
+		expect(search.results[0]?.ranges).toEqual([
 			{ from: 2, to: 3 },
 			{ from: 5, to: 8 },
 		]);
+	});
+
+	test("reports when matching lines exceed the result limit", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "reveal-fuzzy-test-"));
+		temporaryDirectories.push(directory);
+		await writeFile(join(directory, "Note.md"), "alpha beta\nalpine beta\nample beta\n");
+
+		const search = await runFuzzySearch({
+			query: "ab",
+			scope: { type: "vault" },
+			vaultPath: directory,
+			settings: { ...DEFAULT_SETTINGS, maxResults: 2 },
+			signal: new AbortController().signal,
+		});
+
+		expect(search.results).toHaveLength(2);
+		expect(search.truncated).toBe(true);
 	});
 });

@@ -45,7 +45,7 @@ describe("runRipgrepSearch", () => {
 		await writeFile(join(directory, "ignored.txt"), "Needle\n");
 		const results: Array<{ path: string; line: number; from: number }> = [];
 
-		const count = await runRipgrepSearch({
+		const summary = await runRipgrepSearch({
 			query: "Needle",
 			scope: { type: "vault" },
 			vaultPath: directory,
@@ -60,7 +60,7 @@ describe("runRipgrepSearch", () => {
 			},
 		});
 
-		expect(count).toBe(1);
+		expect(summary).toEqual({ count: 1, truncated: false });
 		expect(results).toEqual([{ path: "Note.md", line: 1, from: 3 }]);
 	});
 
@@ -69,7 +69,7 @@ describe("runRipgrepSearch", () => {
 		temporaryDirectories.push(directory);
 		await writeFile(join(directory, "Note.md"), "nothing here\n");
 
-		const count = await runRipgrepSearch({
+		const summary = await runRipgrepSearch({
 			query: "missing",
 			scope: { type: "vault" },
 			vaultPath: directory,
@@ -78,6 +78,42 @@ describe("runRipgrepSearch", () => {
 			onResult: () => undefined,
 		});
 
-		expect(count).toBe(0);
+		expect(summary).toEqual({ count: 0, truncated: false });
+	});
+
+	test("reports truncation only after observing a result beyond the limit", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "reveal-test-"));
+		temporaryDirectories.push(directory);
+		await writeFile(join(directory, "Note.md"), "match one\nmatch two\nmatch three\n");
+		const results: string[] = [];
+
+		const summary = await runRipgrepSearch({
+			query: "match",
+			scope: { type: "vault" },
+			vaultPath: directory,
+			settings: { ...DEFAULT_SETTINGS, maxResults: 2 },
+			signal: new AbortController().signal,
+			onResult: (result) => results.push(result.lineText),
+		});
+
+		expect(summary).toEqual({ count: 2, truncated: true });
+		expect(results).toEqual(["match one", "match two"]);
+	});
+
+	test("does not report truncation when the result count equals the limit", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "reveal-test-"));
+		temporaryDirectories.push(directory);
+		await writeFile(join(directory, "Note.md"), "match one\nmatch two\n");
+
+		const summary = await runRipgrepSearch({
+			query: "match",
+			scope: { type: "vault" },
+			vaultPath: directory,
+			settings: { ...DEFAULT_SETTINGS, maxResults: 2 },
+			signal: new AbortController().signal,
+			onResult: () => undefined,
+		});
+
+		expect(summary).toEqual({ count: 2, truncated: false });
 	});
 });
