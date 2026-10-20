@@ -13,6 +13,7 @@ import { RevealSearchModal } from "./ui/search-modal";
 export default class RevealPlugin extends Plugin {
 	override settings: RevealSettings = { ...DEFAULT_SETTINGS };
 	private activeModal: RevealSearchModal | null = null;
+	private settingsSaveQueue: Promise<void> = Promise.resolve();
 
 	override async onload(): Promise<void> {
 		await this.loadSettings();
@@ -34,6 +35,17 @@ export default class RevealPlugin extends Plugin {
 			},
 		});
 
+		this.addCommand({
+			id: "toggle-compact-vault-search",
+			name: "Toggle compact vault search",
+			checkCallback: (checking) => {
+				const modal = this.activeModal;
+				if (modal == null || !modal.canToggleCompactMode()) return false;
+				if (!checking) modal.toggleCompactMode();
+				return true;
+			},
+		});
+
 		this.addRibbonIcon("search", "Search vault with Reveal", () => this.openVaultSearch());
 		this.addSettingTab(new RevealSettingTab(this.app, this));
 	}
@@ -43,8 +55,11 @@ export default class RevealPlugin extends Plugin {
 		this.activeModal = null;
 	}
 
-	async saveSettings(): Promise<void> {
-		await this.saveData(this.settings);
+	saveSettings(): Promise<void> {
+		const settings = { ...this.settings };
+		const save = this.settingsSaveQueue.then(async () => this.saveData(settings));
+		this.settingsSaveQueue = save.catch(() => undefined);
+		return save;
 	}
 
 	private async loadSettings(): Promise<void> {
@@ -91,6 +106,13 @@ export default class RevealPlugin extends Plugin {
 					const message = error instanceof Error ? error.message : "Unknown error.";
 					new Notice(`Reveal could not open the result: ${message}`);
 				}
+			},
+			onCompactModeChange: (enabled) => {
+				this.settings.compactVaultSearch = enabled;
+				void this.saveSettings().catch((error: unknown) => {
+					const message = error instanceof Error ? error.message : "Unknown error.";
+					new Notice(`Reveal could not save compact mode: ${message}`);
+				});
 			},
 			onClose: () => {
 				if (this.activeModal === modal) this.activeModal = null;

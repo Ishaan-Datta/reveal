@@ -9,6 +9,7 @@ export interface RevealSettings {
 	debounceMs: number;
 	includeHidden: boolean;
 	respectIgnoreFiles: boolean;
+	compactVaultSearch: boolean;
 }
 
 export const DEFAULT_SETTINGS: RevealSettings = {
@@ -20,6 +21,7 @@ export const DEFAULT_SETTINGS: RevealSettings = {
 	debounceMs: 150,
 	includeHidden: false,
 	respectIgnoreFiles: true,
+	compactVaultSearch: false,
 };
 
 export type SearchScope =
@@ -36,6 +38,11 @@ export interface SearchResult {
 	line: number;
 	lineText: string;
 	ranges: MatchRange[];
+}
+
+export interface FileSearchResult {
+	result: SearchResult;
+	matchCount: number;
 }
 
 export type OpenTarget = "current" | "tab" | "split";
