@@ -116,4 +116,24 @@ describe("runRipgrepSearch", () => {
 
 		expect(summary).toEqual({ count: 2, truncated: false });
 	});
+
+	test("can stream all results without applying the configured limit", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "reveal-test-"));
+		temporaryDirectories.push(directory);
+		await writeFile(join(directory, "Note.md"), "match one\nmatch two\nmatch three\n");
+		const results: string[] = [];
+
+		const summary = await runRipgrepSearch({
+			query: "match",
+			scope: { type: "vault" },
+			vaultPath: directory,
+			settings: { ...DEFAULT_SETTINGS, maxResults: 1 },
+			signal: new AbortController().signal,
+			onResult: (result) => results.push(result.lineText),
+			maxResults: null,
+		});
+
+		expect(summary).toEqual({ count: 3, truncated: false });
+		expect(results).toEqual(["match one", "match two", "match three"]);
+	});
 });

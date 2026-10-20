@@ -12,6 +12,7 @@ export interface RipgrepSearchRequest {
 	settings: RevealSettings;
 	signal: AbortSignal;
 	onResult: (result: SearchResult) => void;
+	maxResults?: number | null;
 }
 
 export interface RipgrepSearchSummary {
@@ -75,6 +76,10 @@ export function runRipgrepSearch(request: RipgrepSearchRequest): Promise<Ripgrep
 		let settled = false;
 		let reachedLimit = false;
 		let parseError: unknown;
+		const maxResults =
+			request.maxResults === null
+				? null
+				: Math.max(1, request.maxResults ?? request.settings.maxResults);
 
 		const child = spawn(
 			request.settings.ripgrepPath,
@@ -96,7 +101,7 @@ export function runRipgrepSearch(request: RipgrepSearchRequest): Promise<Ripgrep
 
 		const parser = new RipgrepJsonParser((result) => {
 			if (reachedLimit || request.signal.aborted) return;
-			if (resultCount >= Math.max(1, request.settings.maxResults)) {
+			if (maxResults != null && resultCount >= maxResults) {
 				reachedLimit = true;
 				child.kill();
 				return;

@@ -1,5 +1,7 @@
 import {
+	type App,
 	FileSystemAdapter,
+	type Hotkey,
 	MarkdownView,
 	Notice,
 	Plugin,
@@ -10,9 +12,18 @@ import { openSearchResult } from "./navigation";
 import { RevealSettingTab } from "./settings";
 import { RevealSearchModal } from "./ui/search-modal";
 
+const TOGGLE_COMPACT_COMMAND_ID = "toggle-compact-vault-search";
+
+interface AppWithHotkeyManager extends App {
+	hotkeyManager?: {
+		getHotkeys(commandId: string): Hotkey[];
+	};
+}
+
 export default class RevealPlugin extends Plugin {
 	override settings: RevealSettings = { ...DEFAULT_SETTINGS };
 	private activeModal: RevealSearchModal | null = null;
+	private settingsSaveQueue: Promise<void> = Promise.resolve();
 
 	override async onload(): Promise<void> {
 		await this.loadSettings();
@@ -34,6 +45,17 @@ export default class RevealPlugin extends Plugin {
 			},
 		});
 
+		this.addCommand({
+			id: TOGGLE_COMPACT_COMMAND_ID,
+			name: "Toggle compact vault search",
+			checkCallback: (checking) => {
+				const modal = this.activeModal;
+				if (modal == null || !modal.canToggleCompactMode()) return false;
+				if (!checking) modal.toggleCompactMode();
+				return true;
+			},
+		});
+
 		this.addRibbonIcon("search", "Search vault with Reveal", () => this.openVaultSearch());
 		this.addSettingTab(new RevealSettingTab(this.app, this));
 	}
@@ -43,8 +65,11 @@ export default class RevealPlugin extends Plugin {
 		this.activeModal = null;
 	}
 
-	async saveSettings(): Promise<void> {
-		await this.saveData(this.settings);
+	saveSettings(): Promise<void> {
+		const settings = { ...this.settings };
+		const save = this.settingsSaveQueue.then(async () => this.saveData(settings));
+		this.settingsSaveQueue = save.catch(() => undefined);
+		return save;
 	}
 
 	private async loadSettings(): Promise<void> {
@@ -84,6 +109,7 @@ export default class RevealPlugin extends Plugin {
 			scope,
 			settings: { ...this.settings },
 			initialQuery,
+			toggleCompactHotkeys: this.getToggleCompactHotkeys(),
 			onChoose: async (result, target) => {
 				try {
 					await openSearchResult(this.app, result, target);
@@ -92,12 +118,26 @@ export default class RevealPlugin extends Plugin {
 					new Notice(`Reveal could not open the result: ${message}`);
 				}
 			},
+			onCompactModeChange: (enabled) => {
+				this.settings.compactVaultSearch = enabled;
+				void this.saveSettings().catch((error: unknown) => {
+					const message = error instanceof Error ? error.message : "Unknown error.";
+					new Notice(`Reveal could not save compact mode: ${message}`);
+				});
+			},
 			onClose: () => {
 				if (this.activeModal === modal) this.activeModal = null;
 			},
 		});
 		this.activeModal = modal;
 		modal.open();
+	}
+
+	private getToggleCompactHotkeys(): Hotkey[] {
+		const app = this.app as AppWithHotkeyManager;
+		return (
+			app.hotkeyManager?.getHotkeys(`${this.manifest.id}:${TOGGLE_COMPACT_COMMAND_ID}`) ?? []
+		);
 	}
 
 	private getSelectedText(view?: MarkdownView): string {

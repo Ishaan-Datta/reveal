@@ -88,4 +88,30 @@ describe("runFuzzySearch", () => {
 		expect(search.results).toHaveLength(2);
 		expect(search.truncated).toBe(true);
 	});
+
+	test("counts all matching lines per file and keeps each file's best match", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "reveal-fuzzy-test-"));
+		temporaryDirectories.push(directory);
+		await writeFile(join(directory, "First.md"), "a---b\nab\nalpha beta\n");
+		await writeFile(join(directory, "Second.md"), "able\n");
+
+		const search = await runFuzzySearch({
+			query: "ab",
+			scope: { type: "vault" },
+			vaultPath: directory,
+			settings: { ...DEFAULT_SETTINGS, maxResults: 1 },
+			signal: new AbortController().signal,
+			includeFileResults: true,
+		});
+
+		expect(search.results).toHaveLength(1);
+		expect(search.fileResults).toHaveLength(2);
+		expect(search.fileResults.find(({ result }) => result.path === "First.md")).toMatchObject({
+			matchCount: 3,
+			result: { line: 1, lineText: "ab" },
+		});
+		expect(search.fileResults.find(({ result }) => result.path === "Second.md")).toMatchObject({
+			matchCount: 1,
+		});
+	});
 });

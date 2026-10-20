@@ -1,5 +1,6 @@
 import type {
 	CaseMode,
+	FileSearchResult,
 	MatchRange,
 	RevealSettings,
 	SearchResult,
@@ -18,16 +19,23 @@ interface ScoredMatch {
 	score: number;
 }
 
+interface ScoredFileMatch {
+	match: ScoredMatch;
+	matchCount: number;
+}
+
 export interface FuzzySearchRequest {
 	query: string;
 	scope: SearchScope;
 	vaultPath: string;
 	settings: RevealSettings;
 	signal: AbortSignal;
+	includeFileResults?: boolean;
 }
 
 export interface FuzzySearchResults {
 	results: SearchResult[];
+	fileResults: FileSearchResult[];
 	truncated: boolean;
 }
 
@@ -118,6 +126,7 @@ function compareMatches(left: ScoredMatch, right: ScoredMatch): number {
 export async function runFuzzySearch(request: FuzzySearchRequest): Promise<FuzzySearchResults> {
 	const limit = Math.max(1, request.settings.maxResults);
 	const matches: ScoredMatch[] = [];
+	const fileMatches = new Map<string, ScoredFileMatch>();
 
 	await runRipgrepSearch({
 		query: "^.*\\S.*$",
@@ -138,10 +147,21 @@ export async function runFuzzySearch(request: FuzzySearchRequest): Promise<Fuzzy
 			);
 			if (fuzzyMatch == null) return;
 
-			matches.push({
+			const match: ScoredMatch = {
 				score: fuzzyMatch.score,
 				result: { ...result, ranges: fuzzyMatch.ranges },
-			});
+			};
+			matches.push(match);
+
+			if (request.includeFileResults === true) {
+				const fileMatch = fileMatches.get(result.path);
+				if (fileMatch == null) {
+					fileMatches.set(result.path, { match, matchCount: 1 });
+				} else {
+					fileMatch.matchCount += 1;
+					if (compareMatches(match, fileMatch.match) < 0) fileMatch.match = match;
+				}
+			}
 
 			if (matches.length >= limit * 4) {
 				matches.sort(compareMatches);
@@ -151,8 +171,15 @@ export async function runFuzzySearch(request: FuzzySearchRequest): Promise<Fuzzy
 	});
 
 	matches.sort(compareMatches);
+	const rankedFiles = [...fileMatches.values()].sort((left, right) =>
+		compareMatches(left.match, right.match),
+	);
 	return {
 		results: matches.slice(0, limit).map(({ result }) => result),
+		fileResults: rankedFiles.map(({ match, matchCount }) => ({
+			result: match.result,
+			matchCount,
+		})),
 		truncated: matches.length > limit,
 	};
 }
