@@ -10,6 +10,25 @@
 	flex-grow: 1;
 }
 
+.reveal-search-input {
+	padding-inline-end: 9rem;
+}
+
+.reveal-search-mode {
+	position: absolute;
+	top: 50%;
+	right: var(--size-4-3);
+	max-width: 8rem;
+	overflow: hidden;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	line-height: 1;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	pointer-events: none;
+	transform: translateY(-50%);
+}
+
 .reveal-search-count {
 	flex: none;
 	min-width: 3ch;

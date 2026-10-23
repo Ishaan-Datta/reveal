@@ -6,13 +6,15 @@ import { RipgrepJsonParser } from "./ripgrep-json";
 const MAX_ERROR_LENGTH = 8_192;
 
 export interface RipgrepSearchRequest {
-	query: string;
+	query: string | readonly string[];
 	scope: SearchScope;
 	vaultPath: string;
 	settings: RevealSettings;
 	signal: AbortSignal;
 	onResult: (result: SearchResult) => void;
 	maxResults?: number | null;
+	useRegex?: boolean;
+	transformResult?: (result: SearchResult) => SearchResult | null;
 }
 
 export interface RipgrepSearchSummary {
@@ -40,9 +42,10 @@ function errorMessage(error: unknown): string {
 }
 
 export function buildRipgrepArgs(
-	query: string,
+	query: string | readonly string[],
 	scope: SearchScope,
 	settings: RevealSettings,
+	useRegex = false,
 ): string[] {
 	const args = ["--json", "--no-config", "--color", "never"];
 
@@ -58,12 +61,14 @@ export function buildRipgrepArgs(
 			break;
 	}
 
-	if (!settings.useRegex) args.push("--fixed-strings");
+	if (!useRegex) args.push("--fixed-strings");
 	if (settings.includeHidden) args.push("--hidden");
 	if (!settings.respectIgnoreFiles) args.push("--no-ignore");
 	if (scope.type === "vault") args.push("--glob", "*.md");
 
-	args.push("--regexp", query, "--", scope.type === "vault" ? "." : scope.path);
+	const patterns = typeof query === "string" ? [query] : query;
+	for (const pattern of patterns) args.push("--regexp", pattern);
+	args.push("--", scope.type === "vault" ? "." : scope.path);
 	return args;
 }
 
@@ -83,7 +88,7 @@ export function runRipgrepSearch(request: RipgrepSearchRequest): Promise<Ripgrep
 
 		const child = spawn(
 			request.settings.ripgrepPath,
-			buildRipgrepArgs(request.query, request.scope, request.settings),
+			buildRipgrepArgs(request.query, request.scope, request.settings, request.useRegex),
 			{
 				cwd: request.vaultPath,
 				shell: false,
@@ -99,8 +104,13 @@ export function runRipgrepSearch(request: RipgrepSearchRequest): Promise<Ripgrep
 			else reject(error);
 		};
 
-		const parser = new RipgrepJsonParser((result) => {
+		const parser = new RipgrepJsonParser((parsedResult) => {
 			if (reachedLimit || request.signal.aborted) return;
+			const result =
+				request.transformResult == null
+					? parsedResult
+					: request.transformResult(parsedResult);
+			if (result == null) return;
 			if (maxResults != null && resultCount >= maxResults) {
 				reachedLimit = true;
 				child.kill();

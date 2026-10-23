@@ -26,23 +26,33 @@ Reveal adds the following commands:
 
 Results update as you type. Use the arrow keys to select a result, Enter to open
 it, Ctrl/Cmd+Enter to open it in a new tab, or Alt+Enter to open it in a split.
-Selected editor text is used as the initial query.
+Press Tab to cycle search modes or Shift+Tab to cycle backward. The active mode
+is shown in the search bar. Selected editor text is used as the initial query.
 
 Compact mode keeps the existing result-list appearance but removes line previews
 and shows each file's matching-line count on the right. The overall count shows
 the number of matching files. Compact searches scan all matches to provide exact
-per-file counts, and the selected mode is remembered for future vault searches.
+per-file counts, and the compact preference is remembered for future vault
+searches.
 The maximum-results setting limits the number of file rows rendered without
 limiting the scan used to calculate those counts.
 
-Searches are literal and use smart-case matching by default. If a literal search
-has no exact matches, Reveal uses ripgrep to enumerate eligible lines and applies
-a bounded, in-process fuzzy subsequence ranking pass. Fuzzy results preserve file
-and line metadata without requiring `fzf` or another executable. The fallback can
-be disabled in settings and is not applied to regular-expression searches.
+Each search starts in exact mode. Current-file searches cycle through **Exact**,
+**Regex**, **All words: line**, and **Fuzzy**. Vault searches additionally include
+**All words: file** before fuzzy mode.
 
-Regular-expression queries, case behavior, hidden files, ignore rules, result
-limits, and debounce timing can also be changed in the plugin settings.
+- **Exact** matches the complete query as literal text, including word order.
+- **Regex** interprets the query as a ripgrep regular expression.
+- **All words: line** matches lines containing every whitespace-separated term in
+  any order.
+- **All words: file** matches vault files containing every term, even when the
+  terms occur on different lines. Detailed mode shows matching lines from those
+  files; compact mode shows one row per file.
+- **Fuzzy** ranks lines containing the query characters in order. It is an
+  explicit mode and is never used as a fallback for another mode.
+
+Case behavior, hidden files, ignore rules, result limits, and debounce timing can
+be changed in the plugin settings.
 
 ## Configuration
 
@@ -51,9 +61,7 @@ Open **Settings → Community plugins → Reveal** to configure the plugin.
 | Setting                  | Default    | Description                                                                                                                                                                                                                                               |
 | ------------------------ | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Executable**           | `rg`       | Command name or absolute path to ripgrep. Use **Test** to verify that Obsidian can run it. An absolute path may be necessary when Obsidian does not inherit your shell's `PATH`.                                                                          |
-| **Regular expressions**  | Off        | When enabled, queries are interpreted as ripgrep regular expressions. When disabled, all query characters are matched literally. Invalid regular expressions are reported in an Obsidian notice.                                                          |
-| **Fuzzy fallback**       | On         | When a literal search has no exact results, scan eligible lines and rank those containing the query characters in order. This is an internal subsequence matcher, not MiniSearch or the `fzf` executable. It is not used for regular-expression searches. |
-| **Case sensitivity**     | Smart case | **Smart case** ignores case unless the query contains an uppercase letter. **Case insensitive** always ignores case. **Case sensitive** always requires matching case. The same choice is used by exact and fuzzy searches.                               |
+| **Case sensitivity**     | Smart case | **Smart case** ignores case unless the query contains an uppercase letter. **Case insensitive** always ignores case. **Case sensitive** always requires matching case. The same choice is used by every search mode.                                    |
 | **Include hidden files** | Off        | Pass `--hidden` to ripgrep. For vault searches, this can include Markdown files in hidden directories such as `.obsidian`, subject to ignore rules.                                                                                                       |
 | **Respect ignore files** | On         | Honor ripgrep's normal ignore behavior, including `.gitignore`, `.ignore`, and `.rgignore`. Disable this to pass `--no-ignore`.                                                                                                                           |
 | **Maximum results**      | `200`      | Maximum number of matching lines shown by a detailed search or matching files shown by a compact search. Accepted range: 1–5000.                                                                                                                          |
@@ -64,7 +72,7 @@ Open **Settings → Community plugins → Reveal** to configure the plugin.
 - Vault searches target Markdown files (`*.md`) only.
 - Current-file searches save the active Markdown note before invoking ripgrep.
 - An empty query does not start a search.
-- Starting a new query cancels the previous ripgrep process and any fuzzy pass.
+- Starting a new query or changing modes cancels the previous search.
 - Reveal passes `--no-config` to ripgrep, so `RIPGREP_CONFIG_PATH` does not
   silently change plugin behavior.
 - Queries and paths are passed directly to ripgrep without invoking a shell.

@@ -6,6 +6,7 @@ import type {
 	SearchResult,
 	SearchScope,
 } from "../model";
+import { isCaseSensitive } from "./literal-match";
 import { runRipgrepSearch } from "./ripgrep";
 
 interface IndexedCharacter {
@@ -49,12 +50,6 @@ function indexedCharacters(text: string): IndexedCharacter[] {
 		index += value.length;
 	}
 	return characters;
-}
-
-function isCaseSensitive(query: string, mode: CaseMode): boolean {
-	if (mode === "sensitive") return true;
-	if (mode === "insensitive") return false;
-	return query !== query.toLocaleLowerCase();
 }
 
 function combineRanges(characters: IndexedCharacter[]): MatchRange[] {
@@ -134,10 +129,10 @@ export async function runFuzzySearch(request: FuzzySearchRequest): Promise<Fuzzy
 		vaultPath: request.vaultPath,
 		settings: {
 			...request.settings,
-			useRegex: true,
 			caseMode: "sensitive",
 			maxResults: Number.MAX_SAFE_INTEGER,
 		},
+		useRegex: true,
 		signal: request.signal,
 		onResult: (result) => {
 			const fuzzyMatch = scoreFuzzyMatch(

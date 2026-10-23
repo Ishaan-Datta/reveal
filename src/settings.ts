@@ -43,28 +43,6 @@ export class RevealSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Regular expressions")
-			.setDesc("Interpret search queries as ripgrep regular expressions instead of literal text.")
-			.addToggle((toggle) =>
-				toggle.setValue(this.revealPlugin.settings.useRegex).onChange(async (value) => {
-					this.revealPlugin.settings.useRegex = value;
-					await this.revealPlugin.saveSettings();
-				}),
-			);
-
-		new Setting(containerEl)
-			.setName("Fuzzy fallback")
-			.setDesc(
-				"When a literal search has no exact matches, rank vault lines using fuzzy subsequence matching.",
-			)
-			.addToggle((toggle) =>
-				toggle.setValue(this.revealPlugin.settings.fuzzyFallback).onChange(async (value) => {
-					this.revealPlugin.settings.fuzzyFallback = value;
-					await this.revealPlugin.saveSettings();
-				}),
-			);
-
-		new Setting(containerEl)
 			.setName("Case sensitivity")
 			.setDesc("Smart case is insensitive unless the query contains an uppercase letter.")
 			.addDropdown((dropdown) =>
@@ -102,7 +80,7 @@ export class RevealSettingTab extends PluginSettingTab {
 		new Setting(containerEl).setName("Performance").setHeading();
 		this.addNumberSetting(
 			"Maximum results",
-			"Stop each search after this many matching lines.",
+			"Maximum number of matching lines or files to show.",
 			this.revealPlugin.settings.maxResults,
 			1,
 			5_000,

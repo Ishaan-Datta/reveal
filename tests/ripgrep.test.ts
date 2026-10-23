@@ -29,11 +29,18 @@ describe("buildRipgrepArgs", () => {
 		const args = buildRipgrepArgs(
 			"one|two",
 			{ type: "file", path: "Folder/Note.md" },
-			{ ...DEFAULT_SETTINGS, useRegex: true, caseMode: "sensitive" },
+			{ ...DEFAULT_SETTINGS, caseMode: "sensitive" },
+			true,
 		);
 		expect(args).not.toContain("--fixed-strings");
 		expect(args).toContain("--case-sensitive");
 		expect(args.slice(-3)).toEqual(["one|two", "--", "Folder/Note.md"]);
+	});
+
+	test("passes multiple literal patterns as separate expressions", () => {
+		const args = buildRipgrepArgs(["one", "two"], { type: "vault" }, DEFAULT_SETTINGS);
+		expect(args).toContain("--fixed-strings");
+		expect(args.slice(-6)).toEqual(["--regexp", "one", "--regexp", "two", "--", "."]);
 	});
 });
 

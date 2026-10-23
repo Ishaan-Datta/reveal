@@ -4,12 +4,12 @@ import type {
 	FileSearchResult,
 	OpenTarget,
 	RevealSettings,
+	SearchMode,
 	SearchResult,
 	SearchScope,
 } from "../model";
-import { runFuzzySearch } from "../search/fuzzy";
-import { addFileSearchResult } from "../search/group-results";
-import { runRipgrepSearch } from "../search/ripgrep";
+import { nextSearchMode, SEARCH_MODE_LABELS } from "../search/modes";
+import { runSearch } from "../search/search";
 
 interface SearchModalOptions {
 	vaultPath: string;
@@ -31,12 +31,14 @@ export class RevealSearchModal extends Modal {
 	private inputEl!: HTMLInputElement;
 	private resultsEl!: HTMLElement;
 	private countEl!: HTMLElement;
+	private modeEl!: HTMLElement;
 	private results: DisplayResult[] = [];
 	private selectedIndex = -1;
 	private debounceTimer: number | null = null;
 	private searchController: AbortController | null = null;
 	private generation = 0;
 	private compactMode: boolean;
+	private searchMode: SearchMode = "exact";
 
 	constructor(app: App, private readonly options: SearchModalOptions) {
 		super(app);
@@ -71,6 +73,9 @@ export class RevealSearchModal extends Modal {
 		});
 		this.inputEl.setAttr("aria-label", "Search notes");
 		this.inputEl.setAttr("spellcheck", "false");
+		this.modeEl = inputFieldEl.createSpan({ cls: "reveal-search-mode" });
+		this.modeEl.setAttr("aria-live", "polite");
+		this.updateSearchModeIndicator();
 
 		this.countEl = inputContainerEl.createSpan({ cls: "reveal-search-count" });
 		this.countEl.hidden = true;
@@ -121,48 +126,23 @@ export class RevealSearchModal extends Modal {
 		const controller = new AbortController();
 		this.searchController = controller;
 		const compactMode = this.compactMode;
-		const results: SearchResult[] = [];
-		const fileResults = new Map<string, FileSearchResult>();
+		const searchMode = this.searchMode;
 
 		try {
-			const summary = await runRipgrepSearch({
+			const searchResults = await runSearch({
 				query,
+				mode: searchMode,
+				compactMode,
 				scope: this.options.scope,
 				vaultPath: this.options.vaultPath,
 				settings: this.options.settings,
 				signal: controller.signal,
-				onResult: (result) => {
-					if (generation !== this.generation || controller.signal.aborted) return;
-					if (compactMode) addFileSearchResult(fileResults, result);
-					else results.push(result);
-				},
-				...(compactMode ? { maxResults: null } : {}),
 			});
 
 			if (generation !== this.generation || controller.signal.aborted) return;
-			if (
-				summary.count === 0 &&
-				this.options.settings.fuzzyFallback &&
-				!this.options.settings.useRegex
-			) {
-				const fuzzy = await runFuzzySearch({
-					query,
-					scope: this.options.scope,
-					vaultPath: this.options.vaultPath,
-					settings: this.options.settings,
-					signal: controller.signal,
-					includeFileResults: compactMode,
-				});
-				if (generation !== this.generation || controller.signal.aborted) return;
-				this.searchController = null;
-				if (compactMode) this.updateFileResults(fuzzy.fileResults, true);
-				else this.updateLineResults(fuzzy.results, fuzzy.truncated, true);
-				return;
-			}
-
 			this.searchController = null;
-			if (compactMode) this.updateFileResults([...fileResults.values()], true);
-			else this.updateLineResults(results, summary.truncated, true);
+			if (searchResults.type === "files") this.updateFileResults(searchResults.results, true);
+			else this.updateLineResults(searchResults.results, searchResults.truncated, true);
 		} catch (error) {
 			if (generation !== this.generation || controller.signal.aborted) return;
 			this.searchController = null;
@@ -297,6 +277,18 @@ export class RevealSearchModal extends Modal {
 
 	private handleKeydown(event: KeyboardEvent): void {
 		switch (event.key) {
+			case "Tab":
+				if (event.altKey || event.ctrlKey || event.metaKey) break;
+				event.preventDefault();
+				this.searchMode = nextSearchMode(
+					this.searchMode,
+					this.options.scope,
+					event.shiftKey ? -1 : 1,
+				);
+				this.updateSearchModeIndicator();
+				this.updateDisplayResults([], false, false);
+				this.queueSearch();
+				break;
 			case "ArrowDown":
 				event.preventDefault();
 				this.moveSelection(1);
@@ -312,6 +304,12 @@ export class RevealSearchModal extends Modal {
 				}
 				break;
 		}
+	}
+
+	private updateSearchModeIndicator(): void {
+		const label = SEARCH_MODE_LABELS[this.searchMode];
+		this.modeEl.setText(label);
+		this.inputEl.setAttr("aria-label", `Search notes. Mode: ${label}`);
 	}
 
 	private moveSelection(direction: number): void {
