@@ -7,7 +7,7 @@ import type {
 } from "../model";
 import { runFuzzySearch } from "./fuzzy";
 import { addFileSearchResult } from "./group-results";
-import { findLiteralMatches, queryTerms } from "./literal-match";
+import { filterExactMatchRanges, findLiteralMatches, queryTerms } from "./literal-match";
 import { runRipgrepSearch } from "./ripgrep";
 
 export type SearchResults =
@@ -139,6 +139,13 @@ async function runAllFileSearch(request: SearchRequest): Promise<SearchResults> 
 export async function runSearch(request: SearchRequest): Promise<SearchResults> {
 	switch (request.mode) {
 		case "exact":
+			return runLineSearch(request, {
+				transformResult: (result) => {
+					const ranges = filterExactMatchRanges(result.lineText, result.ranges);
+					return ranges.length === 0 ? null : { ...result, ranges };
+				},
+			});
+		case "relaxed":
 			return runLineSearch(request);
 		case "regex":
 			return runLineSearch(request, { useRegex: true });

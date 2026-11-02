@@ -1,8 +1,17 @@
 import { describe, expect, test } from "bun:test";
 
-import { findLiteralMatches, queryTerms } from "../src/search/literal-match";
+import {
+	filterExactMatchRanges,
+	findLiteralMatches,
+	queryTerms,
+} from "../src/search/literal-match";
 
 describe("literal term matching", () => {
+	function exactRanges(text: string, query: string) {
+		const matches = findLiteralMatches(text, [query], "sensitive", query);
+		return filterExactMatchRanges(text, matches.ranges);
+	}
+
 	test("splits whitespace and removes equivalent duplicate terms", () => {
 		expect(queryTerms(" alpha\tALPHA  beta ", "insensitive")).toEqual(["alpha", "beta"]);
 		expect(queryTerms(" Alpha alpha ", "smart")).toEqual(["Alpha", "alpha"]);
@@ -40,5 +49,28 @@ describe("literal term matching", () => {
 
 	test("recognizes non-letter Unicode uppercase characters", () => {
 		expect(queryTerms("Ⅰ ⅰ", "smart")).toEqual(["Ⅰ", "ⅰ"]);
+	});
+
+	test("keeps exact matches next to non-alphanumeric boundaries", () => {
+		for (const text of ["ink", "(ink)", "ink-blot", "ink_blob", "🙂ink🙂"]) {
+			expect(exactRanges(text, "ink"), text).toHaveLength(1);
+		}
+		expect(exactRanges("(C++)", "C++")).toHaveLength(1);
+		expect(exactRanges("(alpha beta)", "alpha beta")).toHaveLength(1);
+	});
+
+	test("rejects exact matches next to Unicode letters or numbers", () => {
+		for (const text of ["thinking", "inker", "2ink", "ink2", "éink", "ink中", "ink²"]) {
+			expect(exactRanges(text, "ink"), text).toHaveLength(0);
+		}
+		expect(exactRanges("xalpha beta", "alpha beta")).toHaveLength(0);
+		expect(exactRanges("alpha betax", "alpha beta")).toHaveLength(0);
+	});
+
+	test("filters individual ranges without changing UTF-16 offsets", () => {
+		expect(exactRanges("thinking ink inker 🙂ink🙂", "ink")).toEqual([
+			{ from: 9, to: 12 },
+			{ from: 21, to: 24 },
+		]);
 	});
 });

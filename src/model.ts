@@ -24,7 +24,7 @@ export type SearchScope =
 	| { type: "vault" }
 	| { type: "file"; path: string };
 
-export type SearchMode = "exact" | "regex" | "all-line" | "all-file" | "fuzzy";
+export type SearchMode = "exact" | "relaxed" | "regex" | "all-line" | "all-file" | "fuzzy";
 
 export interface MatchRange {
 	from: number;

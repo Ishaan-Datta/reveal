@@ -6,6 +6,7 @@ describe("search modes", () => {
 	test("includes same-file search only for vault scope", () => {
 		expect(availableSearchModes({ type: "vault" })).toEqual([
 			"exact",
+			"relaxed",
 			"regex",
 			"all-line",
 			"all-file",
@@ -13,6 +14,7 @@ describe("search modes", () => {
 		]);
 		expect(availableSearchModes({ type: "file", path: "Note.md" })).toEqual([
 			"exact",
+			"relaxed",
 			"regex",
 			"all-line",
 			"fuzzy",
@@ -21,7 +23,8 @@ describe("search modes", () => {
 
 	test("cycles in both directions and wraps", () => {
 		const scope = { type: "vault" } as const;
-		expect(nextSearchMode("exact", scope)).toBe("regex");
+		expect(nextSearchMode("exact", scope)).toBe("relaxed");
+		expect(nextSearchMode("relaxed", scope)).toBe("regex");
 		expect(nextSearchMode("exact", scope, -1)).toBe("fuzzy");
 		expect(nextSearchMode("fuzzy", scope)).toBe("exact");
 	});

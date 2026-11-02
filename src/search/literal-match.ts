@@ -5,6 +5,43 @@ export interface LiteralMatches {
 	ranges: MatchRange[];
 }
 
+const ALPHANUMERIC = /[\p{Letter}\p{Number}]/u;
+
+function codePointBefore(text: string, index: number): string | null {
+	if (index <= 0) return null;
+	const previous = text.charCodeAt(index - 1);
+	const start =
+		previous >= 0xdc00 &&
+		previous <= 0xdfff &&
+		index >= 2 &&
+		text.charCodeAt(index - 2) >= 0xd800 &&
+		text.charCodeAt(index - 2) <= 0xdbff
+			? index - 2
+			: index - 1;
+	const codePoint = text.codePointAt(start);
+	return codePoint == null ? null : String.fromCodePoint(codePoint);
+}
+
+function codePointAt(text: string, index: number): string | null {
+	const codePoint = text.codePointAt(index);
+	return codePoint == null ? null : String.fromCodePoint(codePoint);
+}
+
+function isAlphanumeric(character: string | null): boolean {
+	return character != null && ALPHANUMERIC.test(character);
+}
+
+export function filterExactMatchRanges(
+	text: string,
+	ranges: readonly MatchRange[],
+): MatchRange[] {
+	return ranges.filter(
+		(range) =>
+			!isAlphanumeric(codePointBefore(text, range.from)) &&
+			!isAlphanumeric(codePointAt(text, range.to)),
+	);
+}
+
 export function isCaseSensitive(query: string, mode: CaseMode): boolean {
 	if (mode === "sensitive") return true;
 	if (mode === "insensitive") return false;

@@ -1,8 +1,9 @@
 import type { SearchMode, SearchScope } from "../model";
 
-const FILE_MODES: readonly SearchMode[] = ["exact", "regex", "all-line", "fuzzy"];
+const FILE_MODES: readonly SearchMode[] = ["exact", "relaxed", "regex", "all-line", "fuzzy"];
 const VAULT_MODES: readonly SearchMode[] = [
 	"exact",
+	"relaxed",
 	"regex",
 	"all-line",
 	"all-file",
@@ -11,6 +12,7 @@ const VAULT_MODES: readonly SearchMode[] = [
 
 export const SEARCH_MODE_LABELS: Record<SearchMode, string> = {
 	exact: "Exact",
+	relaxed: "Relaxed",
 	regex: "Regex",
 	"all-line": "All words: line",
 	"all-file": "All words: file",

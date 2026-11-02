@@ -57,6 +57,47 @@ describe("mode-aware search", () => {
 		if (regex.type === "lines") expect(regex.results).toHaveLength(2);
 	});
 
+	test("separates exact boundaries from relaxed substring matching", async () => {
+		const vaultPath = await createVault();
+		const exact = await search(vaultPath, "exact", "alpha");
+		const relaxed = await search(vaultPath, "relaxed", "alpha");
+
+		expect(exact.type).toBe("lines");
+		if (exact.type === "lines") {
+			expect(exact.results).toHaveLength(3);
+			expect(exact.results.some((result) => result.lineText === "alphabet soup")).toBe(false);
+		}
+		expect(relaxed.type).toBe("lines");
+		if (relaxed.type === "lines") {
+			expect(relaxed.results).toHaveLength(4);
+			expect(relaxed.results.some((result) => result.lineText === "alphabet soup")).toBe(true);
+		}
+	});
+
+	test("applies exact boundaries before compact counts and result limits", async () => {
+		const vaultPath = await mkdtemp(join(tmpdir(), "reveal-search-test-"));
+		temporaryDirectories.push(vaultPath);
+		await writeFile(join(vaultPath, "Boundaries.md"), "alphabet\nalpha\nalpha-beta\n");
+
+		const exactCompact = await search(vaultPath, "exact", "alpha", true);
+		const relaxedCompact = await search(vaultPath, "relaxed", "alpha", true);
+		const limited = await search(vaultPath, "exact", "alpha", false, 1);
+
+		expect(exactCompact).toMatchObject({
+			type: "files",
+			results: [{ result: { line: 1 }, matchCount: 2 }],
+		});
+		expect(relaxedCompact).toMatchObject({
+			type: "files",
+			results: [{ result: { line: 0 }, matchCount: 3 }],
+		});
+		expect(limited).toMatchObject({
+			type: "lines",
+			results: [{ line: 1 }],
+			truncated: true,
+		});
+	});
+
 	test("requires all terms on one line in any order", async () => {
 		const vaultPath = await createVault();
 		const result = await search(vaultPath, "all-line", "alpha beta");

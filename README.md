@@ -38,16 +38,19 @@ The maximum-results setting limits the number of file rows rendered without
 limiting the scan used to calculate those counts.
 
 Each search starts in exact mode. Current-file searches cycle through **Exact**,
-**Regex**, **All words: line**, and **Fuzzy**. Vault searches additionally include
-**All words: file** before fuzzy mode.
+**Relaxed**, **Regex**, **All words: line**, and **Fuzzy**. Vault searches additionally
+include **All words: file** before fuzzy mode.
 
-- **Exact** matches the complete query as literal text, including word order.
+- **Exact** matches the complete query as literal text, including word order, when
+  its surrounding characters are absent or non-alphanumeric.
+- **Relaxed** matches the complete query as literal text anywhere, including inside
+  larger words.
 - **Regex** interprets the query as a ripgrep regular expression.
 - **All words: line** matches lines containing every whitespace-separated term in
-  any order.
+  any order. Terms may occur inside larger words.
 - **All words: file** matches vault files containing every term, even when the
-  terms occur on different lines. Detailed mode shows matching lines from those
-  files; compact mode shows one row per file.
+  terms occur on different lines or inside larger words. Detailed mode shows
+  matching lines from those files; compact mode shows one row per file.
 - **Fuzzy** ranks lines containing the query characters in order. It is an
   explicit mode and is never used as a fallback for another mode.
 
