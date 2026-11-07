@@ -16,12 +16,21 @@ export async function openSearchResult(
 	const leaf = app.workspace.getLeaf(target === "current" ? false : target);
 	await leaf.openFile(abstractFile, { active: true });
 
-	if (!(leaf.view instanceof MarkdownView)) {
+	const requestedView = leaf.view;
+	const activeView = app.workspace.getActiveViewOfType(MarkdownView);
+	const view =
+		requestedView instanceof MarkdownView && requestedView.file?.path === abstractFile.path
+			? requestedView
+			: activeView?.file?.path === abstractFile.path
+				? activeView
+				: null;
+
+	if (view == null) {
 		new Notice("Reveal opened the result, but could not select the matching text.");
 		return;
 	}
 
-	const editor = leaf.view.editor;
+	const editor = view.editor;
 	const lastLine = Math.max(0, editor.lineCount() - 1);
 	const line = Math.min(Math.max(result.line, 0), lastLine);
 	const lineLength = editor.getLine(line).length;
