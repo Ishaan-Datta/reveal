@@ -31,12 +31,20 @@
 
 .reveal-search-count {
 	flex: none;
-	min-width: 3ch;
+	box-sizing: border-box;
+	width: 7ch;
 	margin-inline-end: 1em;
+	padding-inline: var(--size-4-1);
+	overflow: hidden;
 	color: var(--text-muted);
 	font-size: 0.75rem;
 	font-variant-numeric: tabular-nums;
 	text-align: end;
+	white-space: nowrap;
+}
+
+.reveal-search-count-hidden {
+	visibility: hidden;
 }
 
 .reveal-search-result {

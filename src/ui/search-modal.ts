@@ -53,7 +53,7 @@ export class RevealSearchModal extends Modal {
 		if (!this.canToggleCompactMode()) return;
 		this.compactMode = !this.compactMode;
 		this.options.onCompactModeChange(this.compactMode);
-		this.updateDisplayResults([], false, false);
+		this.renderDisplayResults([]);
 		this.queueSearch();
 	}
 
@@ -77,8 +77,10 @@ export class RevealSearchModal extends Modal {
 		this.modeEl.setAttr("aria-live", "polite");
 		this.updateSearchModeIndicator();
 
-		this.countEl = inputContainerEl.createSpan({ cls: "reveal-search-count" });
-		this.countEl.hidden = true;
+		this.countEl = inputContainerEl.createSpan({
+			cls: "reveal-search-count reveal-search-count-hidden",
+		});
+		this.countEl.setAttr("aria-hidden", "true");
 		this.resultsEl = this.modalEl.createDiv({ cls: "prompt-results reveal-search-results" });
 		this.resultsEl.setAttr("role", "listbox");
 		this.resultsEl.addEventListener("mousedown", (event: MouseEvent) => event.preventDefault());
@@ -187,12 +189,16 @@ export class RevealSearchModal extends Modal {
 		showCount: boolean,
 		count = results.length,
 	): void {
-		this.results = results;
-		this.countEl.hidden = !showCount;
+		this.countEl.toggleClass("reveal-search-count-hidden", !showCount);
+		this.countEl.setAttr("aria-hidden", String(!showCount));
 		this.countEl.setText(
 			truncated ? `${String(this.options.settings.maxResults)}+` : String(count),
 		);
+		this.renderDisplayResults(results);
+	}
 
+	private renderDisplayResults(results: DisplayResult[]): void {
+		this.results = results;
 		for (let index = 0; index < results.length; index += 1) {
 			let resultEl = this.resultsEl.children[index] as HTMLElement | undefined;
 			if (resultEl == null) resultEl = this.createResultElement();
@@ -286,7 +292,7 @@ export class RevealSearchModal extends Modal {
 					event.shiftKey ? -1 : 1,
 				);
 				this.updateSearchModeIndicator();
-				this.updateDisplayResults([], false, false);
+				this.renderDisplayResults([]);
 				this.queueSearch();
 				break;
 			case "ArrowDown":
